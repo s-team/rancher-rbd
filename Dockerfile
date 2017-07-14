@@ -25,7 +25,6 @@ RUN wget -q -O- 'https://download.ceph.com/keys/release.asc' | apt-key add - && 
 
 ADD scripts/ /usr/bin/
 ADD entrypoint.sh /
-RUN chmod 755 /*.sh && chmod 755 /usr/bin/*.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["start.sh","storage","--driver-name","rancher-rbd"]
