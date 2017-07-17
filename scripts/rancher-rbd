@@ -21,9 +21,9 @@ create()
     fi
 
     local name=${OPTS['name']}
-    local size=${OPTS['size']:-"1G"}
-    local pool=${OPTS['pool']:-"rbd"}
-    local image_feature=${OPTS['image_feature']:-"layering"}
+    local size=${OPTS['size']:-${RBD_IMAGE_SIZE:-"1G"}}
+    local pool=${OPTS['pool']:-${RBD_POOL:-"rbd"}}
+    local image_feature=${OPTS['image_feature']:-${RBD_IMAGE_FEATURE:-"layering"}}
     local OUT
 
     OUT=`rbd create ${pool}/${name} --size ${size} --image-feature ${image_feature}`
@@ -42,7 +42,7 @@ delete()
     fi
 
     local name=${OPTS['name']}
-    local pool=${OPTS['pool']:-"rbd"}
+    local pool=${OPTS['pool']:-${RBD_POOL:-"rbd"}}
     local locker_id=$(rbd lock list ${pool}/${name} --format json | jq -c .${RBD_LOCK} | jq -r .locker)
     local UNLOCK_OUT
     local OUT
@@ -68,7 +68,7 @@ attach()
     fi
 
     local name=${OPTS['name']}
-    local pool=${OPTS['pool']:-"rbd"}
+    local pool=${OPTS['pool']:-${RBD_POOL:-"rbd"}}
     local LOCK_OUT
     local OUT
     local device
