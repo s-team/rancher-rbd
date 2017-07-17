@@ -9,7 +9,7 @@ fi
 
 init()
 {
-    print_not_supported
+    print_success
 }
 
 create()
