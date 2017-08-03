@@ -18,7 +18,7 @@ ENV LANG en_US.UTF-8
 RUN wget -q -O- 'https://download.ceph.com/keys/release.asc' | apt-key add - && \
     echo deb https://download.ceph.com/debian-luminous/ $(lsb_release -sc) main | tee /etc/apt/sources.list.d/ceph.list && \
     apt-get update && \
-    apt-get install -y ceph-common=12.1.1-1xenial && \
+    apt-get install -y ceph-common=12.1.2-1xenial && \
     rm -rf /var/lib/apt/lists/*
 
 #    apt-get install -y ceph-osd ceph-mds ceph-mon radosgw rbd-fuse ceph-fuse && \
