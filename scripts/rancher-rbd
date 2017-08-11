@@ -26,7 +26,14 @@ create()
     local image_feature=${OPTS['image_feature']:-${RBD_IMAGE_FEATURE:-"layering"}}
     local OUT
 
-    OUT=`rbd create ${pool}/${name} --size ${size} --image-feature ${image_feature}`
+    # if image already exists just roll with it
+    OUT=$(rbd info ${pool}/${name})
+    if [ $? -eq 0  ]; then
+        print_success
+        exit 0
+    fi
+
+    OUT=$(rbd create ${pool}/${name} --size ${size} --image-feature ${image_feature})
     if [ $? -ne 0  ]; then
         print_error "${OUT}"
     fi
@@ -43,16 +50,33 @@ delete()
 
     local name=${OPTS['name']}
     local pool=${OPTS['pool']:-${RBD_POOL:-"rbd"}}
-    local locker_id=$(rbd lock list ${pool}/${name} --format json | jq -c .${RBD_LOCK} | jq -r .locker)
+    local locker_id
     local UNLOCK_OUT
     local OUT
 
-    if [ "${locker_id}" != "null" ]; then
-        UNLOCK_OUT=`rbd lock remove ${pool}/${name} ${RBD_LOCK} ${locker_id}`
-        echo "rbd remove lock err when deleting vol: ${UNLOCK_OUT}"
+    OUT=$(rbd info ${pool}/${name})
+    if [ $? -ne 0 ]; then
+        log_info ${pool}/${name} "Device does not exist:"
+        print_success
+        exit 0
     fi
 
-    OUT=`rbd rm --no-progress ${pool}/${name}`
+    locker_id=$(rbd lock list ${pool}/${name} --format json | jq -c .${RBD_LOCK} | jq -r .locker)
+    if [ "${locker_id}" != "null" ]; then
+        UNLOCK_OUT=$(rbd lock remove ${pool}/${name} ${RBD_LOCK} ${locker_id})
+        log_info ${pool}/${name} "RBD remove lock err when deleting vol:"
+        print_success
+        exit 0
+    fi
+
+    device=$(rbd showmapped --format json | jq -c --arg n ${name} --arg p ${pool} '.[] | select(.name==$n and .pool==$p)' | jq -r .device)
+    if [ ! -z "${device}" ]; then
+        log_info ${device} "Waiting for unmap:"
+        print_success
+        exit 0
+    fi
+
+    OUT=$(rbd rm --no-progress ${pool}/${name})
     if [ $? -ne 0  ]; then
         print_error "${OUT}"
     fi
@@ -74,16 +98,18 @@ attach()
     local device
     local timeout
 
-    LOCK_OUT=`rbd lock add ${pool}/${name} ${RBD_LOCK}`
-    if [ $? -ne 0  ]; then
-        device=$(rbd showmapped --format json | jq -c --arg n ${name} --arg p ${pool} '.[] | select(.name==$n and .pool==$p)' | jq -r .device)
-        if [ ! -z "${device}" ]; then
-            print_device ${device}
-            exit 0
-        fi
+    locker_id=$(rbd lock list ${pool}/${name} --format json | jq -c .${RBD_LOCK} | jq -r .locker)
+    if [ "${locker_id}" == "null" ]; then
+        rbd lock add ${pool}/${name} ${RBD_LOCK}
     fi
 
-    OUT=`rbd map ${pool}/${name}`
+    device=$(rbd showmapped --format json | jq -c --arg n ${name} --arg p ${pool} '.[] | select(.name==$n and .pool==$p)' | jq -r .device)
+    if [ ! -z "${device}" ]; then
+        print_device ${device}
+        exit 0
+    fi
+
+    OUT=$(rbd map ${pool}/${name})
     if [ $? -ne 0  ]; then
         print_error "${OUT}"
     fi
@@ -119,15 +145,15 @@ detach()
         exit 0
     fi
 
-    rbd_name=`rbd showmapped --format json | jq -c --arg d ${DEVICE} '.[] | select(.device==$d)' | jq -r .name`
-    rbd_pool=`rbd showmapped --format json | jq -c --arg d ${DEVICE} '.[] | select(.device==$d)' | jq -r .pool`
+    rbd_name=$(rbd showmapped --format json | jq -c --arg d ${DEVICE} '.[] | select(.device==$d)' | jq -r .name)
+    rbd_pool=$(rbd showmapped --format json | jq -c --arg d ${DEVICE} '.[] | select(.device==$d)' | jq -r .pool)
 
-    OUT=`rbd unmap /dev/${name}`
+    OUT=$(rbd unmap /dev/${name})
     if [ $? -ne 0 ]; then
         print_error "${OUT}"
     fi
 
-    locker_id=`rbd lock list ${rbd_pool}/${rbd_name} --format json | jq -c .${RBD_LOCK} | jq -r .locker`
+    locker_id=$(rbd lock list ${rbd_pool}/${rbd_name} --format json | jq -c .${RBD_LOCK} | jq -r .locker)
     if [ "${locker_id}" != "null" ]; then
         rbd lock remove ${rbd_pool}/${rbd_name} ${RBD_LOCK} ${locker_id}
     fi
@@ -140,7 +166,6 @@ detach()
         fi
         sleep 1
     done
-
 
     print_success
 }
@@ -186,7 +211,14 @@ unmount()
 {
     # ${MNT_DEST} will be set with the directory from which the filesystem should be unmounted
     local OUT
-    if ! OUT=$(umount "${MNT_DEST}" 2>&1); then
+    OUT=$(cat /proc/mounts | grep ${MNT_DEST})
+    if [ $? -ne 0 ]; then
+        print_success "unmounted"
+        exit 0
+    fi
+
+    OUT=$(umount ${MNT_DEST} 2>&1)
+    if [ $? -ne 0 ]; then
         if [ "$(echo ${OUT} | grep 'not mounted')" ]; then
             print_success "not mounted"
         elif [ "$(echo ${OUT} | grep 'mountpoint not found')" ]; then
@@ -195,6 +227,7 @@ unmount()
             print_error "${OUT}"
         fi
     fi
+
     print_success "unmounted"
 }
 
