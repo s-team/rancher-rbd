@@ -1,7 +1,5 @@
 FROM ubuntu:16.04
 
-MAINTAINER rlx <alex.gretha@s-team.at>
-
 ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ENV HOME /root
 ENV DEBIAN_FRONTEND noninteractive
